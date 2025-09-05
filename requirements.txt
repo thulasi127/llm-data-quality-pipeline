@@ -1,0 +1,9 @@
+pandas
+pyarrow
+duckdb
+confluent-kafka
+prefect==2.*
+langdetect
+better-profanity
+streamlit
+datasets

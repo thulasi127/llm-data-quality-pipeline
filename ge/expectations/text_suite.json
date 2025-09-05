@@ -1,0 +1,25 @@
+{
+  "expectation_suite_name": "text_suite",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "id"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "ts"
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "text_len",
+        "min_value": 20,
+        "max_value": 4000
+      }
+    }
+  ]
+}

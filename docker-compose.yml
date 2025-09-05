@@ -1,0 +1,7 @@
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.9
+    command: ["redpanda","start","--overprovisioned","--smp","1","--memory","1G","--reserve-memory","0M","--advertise-kafka-addr","localhost:9092","--check=false"]
+    ports:
+      - "9092:9092"
+      - "9644:9644"
