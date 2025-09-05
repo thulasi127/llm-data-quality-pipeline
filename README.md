@@ -121,11 +121,6 @@ python -m streamlit run streamlit_app/app.py
 ---
 
 ## Dashboard preview
-Add this image to your README to show expected output:
-```
-![Dashboard Preview](assets/dashboard_preview.png)
-```
-
 ![Dashboard Preview](assets/MVP-Screenshot-1.png)
 ![Dashboard Preview](assets/MVP-Screenshot-2.png)
 
