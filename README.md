@@ -14,7 +14,7 @@ Web-scale text is messy: duplicates, off-language content, profanity, and fragme
 - **Streaming ingest** via Kafka (Redpanda)
 - **Deterministic quality gates**: length, language≈English, profanity list, within-batch de-dup
 - **Medallion storage** in Parquet: **Bronze** (raw), **Silver** (clean), **Gold** (curated/day-partitioned)
-- **Run manifest (JSONL)**: counts, rejection breakdown, artifact paths
+- **Run manifest (JSON)**: counts, rejection breakdown, artifact paths
 - **Dashboard** (Streamlit + DuckDB): KPIs, reasons, trends, samples
 - **Orchestration** with Prefect (single node)
 
