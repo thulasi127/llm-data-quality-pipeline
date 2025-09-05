@@ -1,96 +1,88 @@
-# LLM Dataset Quality Pipeline (MVP)
+# LLM Dataset Quality Pipeline
 
-An end-to-end, production-styled path from **raw text** to **curated, versioned datasets** with **live quality telemetry**. Built to demonstrate how we keep “garbage out” before it becomes “garbage in” for ML/LLM training.
-
----
-
-## 1) Problem (what breaks and why)
-Web-scale text is messy: duplicates, off-language content, profanity, and fragments that don’t say anything. If we don’t gate this early, models learn the wrong lessons. The goal here is simple and measurable: **ingest → validate → store clean data with provenance → surface quality signals**.
+An end‑to‑end path from **raw text** to **clean, versioned datasets** with a **live dashboard**. 
+The goal is straightforward: **keep bad data out before it becomes bad training signal** (“garbage in, garbage out”).
 
 ---
 
-## 2) Scope
-### In scope (MVP)
-- **Streaming ingest** via Kafka (Redpanda)
-- **Deterministic quality gates**: length, language≈English, profanity list, within-batch de-dup
-- **Medallion storage** in Parquet: **Bronze** (raw), **Silver** (clean), **Gold** (curated/day-partitioned)
-- **Run manifest (JSONL)**: counts, rejection breakdown, artifact paths
-- **Dashboard** (Streamlit + DuckDB): KPIs, reasons, trends, samples
-- **Orchestration** with Prefect (single node)
-
-### Out of scope
-- Model training/fine-tuning
-- Petabyte-scale Spark/Airflow clusters
-- Ent-grade auth/RBAC, multi-tenant controls
-- Full PII/advanced toxicity detection
+## Why this matters (short story)
+Most web text isn’t training‑ready. It’s full of duplicates, non‑English content, profanity, or fragments that say nothing. 
+If we feed that to a model, we teach it the wrong lessons. This project shows how to **ingest**, **check**, and **curate** data 
+so what reaches your models is defensible and easy to trace.
 
 ---
 
-## 3) High-level design
+## What this pipeline does
+- **Takes in streaming text** through Kafka (Redpanda).
+- **Checks each record**: length bounds, “looks like English,” no profanity, and no duplicates in the current batch.
+- **Stores data in three folders** (the “Medallion” approach):
+  - **Bronze**: the raw batch exactly as received (for audit/replay).
+  - **Silver**: the records that passed all checks, with a consistent schema.
+  - **Gold**: the “ready to use” dataset, grouped by date (easy to point training jobs at).
+- **Writes a run log** (one line per run) with counts, why rows were rejected, and where files were written.
+- **Shows a dashboard** with KPIs, rejection breakdowns, trends, and sample rows.
+
+> Terminology made plain:  
+> – *Checks* = data quality checks (sometimes called “quality gates”).  
+> – *Run log* = a small JSONL file that summarizes each run (counts, reasons, file paths).
+
+---
+
+## How it works (at a glance)
 ```
 Data Source → Kafka (Redpanda) → Prefect Flow
-           → Validation (len/lang/profanity/dupe)
+           → Checks (length / language / profanity / duplicate)
            → Bronze (raw) + Silver (clean)
-           → Gold (curated, partitioned by day)
-           → Streamlit (KPIs, reasons, trends, samples)
+           → Gold (ready for training, by day)
+           → Streamlit Dashboard (metrics + samples)
 ```
-Design notes:
-- Push work to the edges: validate before writing “good” data.
-- Keep **Bronze** immutable for audit/replay. Treat **Silver/Gold** as contracts.
-- Make quality visible: trend lines and reason codes or it didn’t happen.
+
+**Per run**
+1) A producer sends JSON messages to Kafka topic `raw_text`.  
+2) The Prefect flow reads a batch (e.g., ~1,000 messages or ~30 seconds).  
+3) Each record passes or fails the checks.  
+4) We write **Bronze** (raw), **Silver** (passed), **Rejected** (failed with reason), and **Gold** (curated by day).  
+5) We append one line to the **run log** so you can trace what happened.
 
 ---
 
-## 4) Low-level design
-### Data model (post-cleaning)
-- `id` (UUID), `ts` (ISO-8601)
-- `text` (string), `text_len` (int)
+## Data shape (after cleaning)
+- `id` (UUID), `ts` (UTC time), `text` (string), `text_len` (derived)  
 - `source` (`web|doc|code`), `domain` (`news|code|social|docs`), `category` (`ai|finance|health|education`)
 
-### Quality gates (MVP)
-- **Length:** 20 ≤ `text_len` ≤ 4000
-- **Language:** heuristic English check
-- **Profanity:** rule-based deny list
-- **Duplicates:** drop within batch on `(source, text)`
+**Checks used in the MVP**
+- **Length**: 20 ≤ `text_len` ≤ 4,000  
+- **Language**: text looks like English (heuristic)  
+- **Profanity**: rule‑based deny list  
+- **Duplicate**: drop duplicates within the current batch (by `(source, text)`).
 
-### Storage layout
+---
+
+## Output folders
 ```
 data/
   bronze/run_ts=YYYYMMDDTHHMMSS/raw.parquet
   silver/run_ts=YYYYMMDDTHHMMSS/good.parquet
   rejects/run_ts=YYYYMMDDTHHMMSS/bad.parquet
   gold/ds=YYYY-MM-DD/gold.parquet
-manifests/versions.jsonl   # one JSON line per run (counts, reasons, paths)
+manifests/versions.jsonl    # the run log: one JSON line per run (counts, reasons, paths)
 ```
 
-### Components
-- **Kafka/Redpanda:** durable ingest, local dev via docker-compose
-- **Prefect flow:** batch on N≈1000 or t≈30s; write Bronze/Silver/Rejects/Gold + manifest
-- **DuckDB:** fast Parquet scans for the UI
-- **Streamlit:** KPIs, rejection mix, trend, and samples
-
 ---
 
-## 5) Success criteria
-- Rising **Pass %** over time as gates and sources improve
-- Rejection reasons explain most failures (no “unknown” buckets)
-- Gold is stable (schema) and complete (daily partition present)
-- Manifest provides reproducible lineage for any run
+## Runbook (how to run it)
 
----
-
-## 6) How to run system
-### Prereqs
+### Prerequisites
 - **Docker Desktop** (for Redpanda/Kafka)
 - **Python 3.9+**
 
-### Quickstart (synthetic source)
+### Quickstart (synthetic data)
 ```bash
 # 0) Clone & enter
 git clone <your-repo-url> llm-data-quality-pipeline
 cd llm-data-quality-pipeline
 
-# 1) Start Kafka API (Redpanda)
+# 1) Start Redpanda (Kafka API)
 docker compose up -d
 
 # 2) Python env
@@ -99,49 +91,52 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-# 3) Produce synthetic messages → Kafka: raw_text
+# 3) Produce synthetic messages
 python producers/kafka_text_producer.py
 
-# 4) Run a pipeline batch (ingest→validate→persist→manifest)
+# 4) Run one pipeline batch
 python prefect_flows/pipeline.py
 
-# 5) Launch the dashboard
+# 5) Open the dashboard
 python -m streamlit run streamlit_app/app.py
-# open http://localhost:8501
+# visit http://localhost:8501
 ```
 
-**Dashboard shows**
-- KPIs: Ingested / Passed / Rejected / Pass %
-- Rejection reasons (length / language / profanity / duplicate)
-- Domain/Category mix
-- Pass % trend across runs
-- Samples: Gold and Rejects
-
-### Real source (Hugging Face → Kafka)
+### Use a real dataset (Hugging Face → Kafka)
 ```bash
 python -m pip install datasets
 
-# Example (v3-compatible): English Wikipedia
+# Example (v3-compatible)
 HF_DATASET=wikipedia HF_CONFIG=20220301.en HF_SPLIT=train LIMIT=2000   python producers/hf_kafka_producer.py
 
 # Another example
 HF_DATASET=ag_news HF_SPLIT=train LIMIT=2000   python producers/hf_kafka_producer.py
 
-# Then run pipeline + UI
+# Then run pipeline + dashboard
 python prefect_flows/pipeline.py
 python -m streamlit run streamlit_app/app.py
 ```
 
-**Producer env vars**
-`HF_DATASET`, `HF_CONFIG` (if required), `HF_SPLIT`, `LIMIT`, `THROTTLE_MS`, `KAFKA_BOOTSTRAP` (default `localhost:9092`), `KAFKA_TOPIC` (default `raw_text`).  
-> On `datasets` v3: some script-based datasets (e.g., `openwebtext`) are removed. Use v3-compatible sets (e.g., `wikipedia`, `ag_news`, `imdb`) or pin `datasets<3.0` if needed.
+**Producer env vars**: `HF_DATASET`, `HF_CONFIG` (if needed), `HF_SPLIT`, `LIMIT`, `THROTTLE_MS`, 
+`KAFKA_BOOTSTRAP` (default `localhost:9092`), `KAFKA_TOPIC` (default `raw_text`).  
+*Note: some older, script‑based datasets (e.g., `openwebtext`) aren’t supported in `datasets` v3. Use v3‑compatible sets or pin `datasets<3.0`.*
 
 ---
 
-## 7) Troubleshooting
-- **`docker: command not found`** → start Docker Desktop; on macOS:  
+## Dashboard preview
+Add this image to your README to show expected output:
+```
+![Dashboard Preview](assets/dashboard_preview.png)
+```
+
+![Dashboard Preview](assets/dashboard_preview.png)
+
+---
+
+## Troubleshooting (fast answers)
+- **`docker: command not found`** → start Docker Desktop; on macOS add:  
   `export PATH=$PATH:/Applications/Docker.app/Contents/Resources/bin`
-- **Broker unavailable** → give Redpanda a few seconds; `docker compose logs -f`
+- **Kafka not ready** → wait a few seconds; `docker compose logs -f`
 - **Moved folder → “bad interpreter”** → rebuild venv:
   ```bash
   deactivate 2>/dev/null || true
@@ -150,16 +145,33 @@ python -m streamlit run streamlit_app/app.py
   source .venv/bin/activate
   python -m pip install -r requirements.txt
   ```
-- **HF error “Dataset scripts no longer supported”** → use v3-compatible datasets or `python -m pip install "datasets<3.0"`
+- **HF error “Dataset scripts no longer supported”** → use v3‑compatible datasets or `python -m pip install "datasets<3.0"`
 - **Port 9092 busy** → stop other Kafka or change port in `docker-compose.yml` and set `KAFKA_BOOTSTRAP` accordingly
 
 ---
 
-## 8) Notes & next steps
-- Cross-run dedupe (content hashes) for Gold
-- PII/advanced toxicity checks (regex/ML)
-- Export “latest Gold” from UI; add MLflow lineage
-- Airflow/Spark variants for scale-out
+## Next steps (nice to have)
+- Deduplicate across runs using content hashes
+- Add PII/advanced toxicity checks
+- “Download latest Gold” from the UI; log dataset lineage (e.g., MLflow)
+- Spark/Airflow variants for scale‑out
 
 ---
 
+## Git hygiene
+```
+# .gitignore (recommended)
+.venv/
+__pycache__/
+*.pyc
+data/
+manifests/
+.streamlit/
+```
+To keep folder structure without data:
+```
+data/*
+!data/.keep
+manifests/*
+!manifests/.keep
+```
