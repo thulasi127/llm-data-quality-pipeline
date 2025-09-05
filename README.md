@@ -1,7 +1,6 @@
 # LLM Dataset Quality Pipeline
 
-An end‑to‑end path from **raw text** to **clean, versioned datasets** with a **live dashboard**. 
-The goal is straightforward: **keep bad data out before it becomes bad training signal** (“garbage in, garbage out”).
+An end-to-end, production-styled path from **raw text** to **curated, versioned datasets** with **live quality telemetry**. Built to demonstrate how we can keep “garbage out” before it becomes “garbage in” for ML/LLM training.
 
 ---
 
@@ -12,15 +11,14 @@ so what reaches your models is defensible and easy to trace.
 
 ---
 
-## What this pipeline does
-- **Takes in streaming text** through Kafka (Redpanda).
-- **Checks each record**: length bounds, “looks like English,” no profanity, and no duplicates in the current batch.
-- **Stores data in three folders** (the “Medallion” approach):
-  - **Bronze**: the raw batch exactly as received (for audit/replay).
-  - **Silver**: the records that passed all checks, with a consistent schema.
-  - **Gold**: the “ready to use” dataset, grouped by date (easy to point training jobs at).
-- **Writes a run log** (one line per run) with counts, why rows were rejected, and where files were written.
-- **Shows a dashboard** with KPIs, rejection breakdowns, trends, and sample rows.
+## 2) Scope
+### In scope (MVP)
+- **Streaming ingest** via Kafka (Redpanda)
+- **Deterministic quality gates**: length, language≈English, profanity list, within-batch de-dup
+- **Medallion storage** in Parquet: **Bronze** (raw), **Silver** (clean), **Gold** (curated/day-partitioned)
+- **Run manifest (JSON)**: counts, rejection breakdown, artifact paths
+- **Dashboard** (Streamlit + DuckDB): KPIs, reasons, trends, samples
+- **Orchestration** with Prefect (single node)
 
 > Terminology made plain:  
 > – *Checks* = data quality checks (sometimes called “quality gates”).  
@@ -79,7 +77,6 @@ manifests/versions.jsonl    # the run log: one JSON line per run (counts, reason
 ### Quickstart (synthetic data)
 ```bash
 # 0) Clone & enter
-git clone <your-repo-url> llm-data-quality-pipeline
 cd llm-data-quality-pipeline
 
 # 1) Start Redpanda (Kafka API)
