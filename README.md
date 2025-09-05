@@ -1,6 +1,6 @@
 # LLM Dataset Quality Pipeline (MVP)
 
-An end-to-end, production-styled path from **raw text** to **curated, versioned datasets** with **live quality telemetry**. Built to demonstrate how we keep “garbage out” before it becomes “garbage in” for ML/LLM training.
+An end-to-end, production-styled path from **raw text** to **curated, versioned datasets** with **live quality telemetry**. Built to demonstrate how we can keep “garbage out” before it becomes “garbage in” for ML/LLM training.
 
 ---
 
