@@ -87,7 +87,6 @@ manifests/versions.jsonl   # one JSON line per run (counts, reasons, paths)
 ### Quickstart (synthetic source)
 ```bash
 # 0) Clone & enter
-git clone <your-repo-url> llm-data-quality-pipeline
 cd llm-data-quality-pipeline
 
 # 1) Start Kafka API (Redpanda)
